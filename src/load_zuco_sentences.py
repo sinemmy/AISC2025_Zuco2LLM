@@ -103,3 +103,16 @@ def get_zuco_sentence_dataloader(csv_path, batch_size=32, shuffle=True, transfor
         num_workers=2
     )
 
+# Transform to tokenize sentences 
+class TokenizerTransform:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        
+    def __call__(self, sample):
+        # Tokenize the sentence
+        tokenized = self.tokenizer(sample['sentence'])
+        
+        # Add tokenized data to the sample
+        sample['tokens'] = tokenized
+        
+        return sample
