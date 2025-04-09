@@ -1,10 +1,10 @@
-# load_zuco_sentences.py
 import pandas as pd
-import json
-from pathlib import Path
 import torch
 from torch.utils.data import Dataset, DataLoader
+import json
+from pathlib import Path
 
+# Takes sentence data from the Zuco dataset (json) and loads it into a pandas DataFrame
 def load_zuco_dataframe(file_path="../portable_data/sentence_content.json"):
     """
     Load Zuco sentence data from JSON into a clean pandas DataFrame.
@@ -35,9 +35,7 @@ def load_zuco_dataframe(file_path="../portable_data/sentence_content.json"):
         print(f"Error loading sentence data: {e}")
         return pd.DataFrame()
     
-import pandas as pd
-import torch
-from torch.utils.data import Dataset, DataLoader
+
 
 class ZucoSentenceDataset(Dataset):
     """Dataset for Zuco sentences with NR and TSR indices"""
