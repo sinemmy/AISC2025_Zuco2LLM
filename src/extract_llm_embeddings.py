@@ -12,7 +12,7 @@ class TransformerLensEmbeddingExtractor:
     for the Zuco dataset. Designed for easier steering and intervention later.
     """
     
-    def __init__(self, model_name='gpt2-medium', device=None):
+    def __init__(self, model_name='gpt2-medium', device=None, include_attn=False):
         """
         Initialize the embedding extractor with TransformerLens.
         
@@ -22,7 +22,8 @@ class TransformerLensEmbeddingExtractor:
         """
         self.model_name = model_name
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
-        
+        self.include_attn = include_attn
+
         print(f"Loading model {model_name} using TransformerLens on {self.device}...")
         self.model = HookedTransformer.from_pretrained(
             model_name,
@@ -104,13 +105,21 @@ class TransformerLensEmbeddingExtractor:
             
             hooks.append((f"blocks.{layer_idx}.mlp.hook_post", create_hook_fn(layer_idx)))
             
-            # Hook for attention outputs
-            def create_attn_hook_fn(layer_idx):
-                def hook_fn(act, hook):
-                    cache[f"blocks.{layer_idx}.attn"] = act.detach().cpu()
-                return hook_fn
+            if self.include_attn:
+                # Hook for attention inputs
+                def create_attn_input_hook_fn(layer_idx):
+                    def hook_fn(act, hook):
+                        cache[f"blocks.{layer_idx}.attn.input"] = act.detach().cpu()
+                    return hook_fn
                 
-            hooks.append((f"blocks.{layer_idx}.attn.hook_result", create_attn_hook_fn(layer_idx)))
+                hooks.append((f"blocks.{layer_idx}.attn.hook_input", create_attn_input_hook_fn(layer_idx)))
+                # Hook for attention outputs
+                def create_attn_hook_fn(layer_idx):
+                    def hook_fn(act, hook):
+                        cache[f"blocks.{layer_idx}.attn"] = act.detach().cpu()
+                    return hook_fn
+                    
+                hooks.append((f"blocks.{layer_idx}.attn.hook_result", create_attn_hook_fn(layer_idx)))
             
         # Hook for residual stream (final layer output)
         def final_hook_fn(act, hook):
@@ -212,7 +221,9 @@ class TransformerLensEmbeddingExtractor:
         result = {}
         for layer_idx in layers:
             result[f"mlp_{layer_idx}"] = {}
-            result[f"attn_{layer_idx}"] = {}
+            if self.include_attn:
+                result[f"attn_{layer_idx}"] = {}
+            
         result["final"] = {}
         
         # Process each word with its preceding context
