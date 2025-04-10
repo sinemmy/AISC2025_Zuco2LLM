@@ -6,6 +6,7 @@ from tqdm import tqdm
 import transformer_lens.utils as utils
 from transformer_lens import HookedTransformer
 import os
+import glob
 
 class TransformerLensEmbeddingExtractor:
     """
@@ -427,7 +428,7 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
         final_save_path = Path(save_path)
         torch.save(results, final_save_path)
         print(f"Final embeddings saved to {final_save_path}")
-        
+
         # Delete checkpoint files
         checkpoint_pattern = str(Path(save_path).with_suffix("")) + ".checkpoint_*.pt"
         checkpoint_files = glob.glob(checkpoint_pattern)
