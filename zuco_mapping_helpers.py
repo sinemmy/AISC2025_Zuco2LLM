@@ -44,3 +44,4 @@ def train_encoding_models(layer_to_word_embeddings, eeg_features):
         print(f"Layer {layer_idx}: MSE = {mse:.4f}")
     
     return layer_to_model, layer_to_performance
+
