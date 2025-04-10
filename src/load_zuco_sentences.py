@@ -100,9 +100,9 @@ class TokenizerTransform:
             sample['sentence'],
             return_tensors='pt',
             padding='max_length',
-            truncation=True,
-            max_length=128
+            truncation=False
         )
+         #max_length=128
         
         # Remove the batch dimension
         for key in tokenized:
