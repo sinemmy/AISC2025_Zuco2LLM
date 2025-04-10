@@ -256,79 +256,6 @@ class TransformerLensEmbeddingExtractor:
         
         return result
 
-def extract_embeddings_for_zuco(csv_path, model_name='gpt2-medium', layers=None, 
-                               sliding_window=True, batch_size=16, device=None,
-                               save_path=None):
-    """
-    Extract embeddings for all sentences in the Zuco dataset using TransformerLens.
-    
-    Args:
-        csv_path: Path to the CSV file with sentences and task indices
-        model_name: Name of the transformer model to use
-        layers: List of layer indices to extract
-        sliding_window: Whether to use sliding window approach (Goldstein method)
-        batch_size: Batch size for processing
-        device: Device to run the model on
-        save_path: Optional path to save embeddings incrementally
-        
-    Returns:
-        Dictionary mapping sentence_id to extracted embeddings
-    """
-    # Load sentences from CSV
-    import pandas as pd
-    df = pd.read_csv(csv_path)
-    
-    # Create embedding extractor
-    extractor = TransformerLensEmbeddingExtractor(model_name=model_name, device=device)
-    
-    # Initialize results
-    results = {}
-    
-    # Process sentences
-    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing sentences"):
-        sentence = row['sentence']
-        nr_index = row['NR_index']
-        tsr_index = row['TSR_index']
-        
-        # Use a unique sentence ID combining task and index
-        # -100 means the sentence is not present in that task
-        if nr_index != -100:
-            sentence_id = f"NR_{nr_index}"
-        elif tsr_index != -100:
-            sentence_id = f"TSR_{tsr_index}"
-        else:
-            sentence_id = f"sentence_{idx}"
-        
-        # Extract embeddings based on approach
-        if sliding_window:
-            embeddings = extractor.extract_embeddings_with_sliding_window(
-                sentence, layers=layers)
-        else:
-            embeddings = extractor.extract_embeddings_from_sentence(
-                sentence, layers=layers)
-        
-        # Store results
-        results[sentence_id] = {
-            'sentence': sentence,
-            'NR_index': nr_index,
-            'TSR_index': tsr_index,
-            'embeddings': embeddings
-        }
-        
-        # Save incrementally if path is provided
-        if save_path and (idx + 1) % 100 == 0:
-            temp_save_path = Path(save_path).with_suffix(f".checkpoint_{idx+1}.pt")
-            torch.save(results, temp_save_path)
-            print(f"Checkpoint saved to {temp_save_path}")
-    
-    # Final save
-    if save_path:
-        final_save_path = Path(save_path)
-        torch.save(results, final_save_path)
-        print(f"Final embeddings saved to {final_save_path}")
-    
-    return results
-
 def save_embeddings(embeddings, output_path):
     """
     Save extracted embeddings to disk.
@@ -390,9 +317,10 @@ def get_layer_activations(model, text, layer=0, neuron_index=None):
     return utils.to_numpy(cache["activation"])
 
 def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layers=None, 
-                                      sliding_window=True, batch_size=16, device=None):
+                                     sliding_window=True, batch_size=16, device=None, 
+                                     include_attn=False, save_path=None, save_separate_batches=False):
     """
-    Extract embeddings using your custom DataLoader with TransformerLens.
+    Extract embeddings using custom DataLoader with TransformerLens.
     
     Args:
         csv_path: Path to the CSV file
@@ -401,12 +329,18 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
         sliding_window: Whether to use sliding window approach
         batch_size: Batch size for processing
         device: Device to run the model on
+        include_attn: Whether to extract attention layer activations
+        save_path: Optional path to save embeddings
+        save_separate_batches: If True, save each batch as a separate file
+        
         
     Returns:
         Dictionary mapping sentence_id to extracted embeddings
     """
     from src.load_zuco_sentences import get_zuco_sentence_dataloader, TokenizerTransform
     from transformers import GPT2Tokenizer
+    from pathlib import Path
+    import torch
     
     # Create tokenizer and transform
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
@@ -423,7 +357,7 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
     )
     
     # Create embedding extractor
-    extractor = TransformerLensEmbeddingExtractor(model_name=model_name, device=device)
+    extractor = TransformerLensEmbeddingExtractor(model_name=model_name, device=device, include_attn=include_attn)
     
     # Determine which layers to extract
     if layers is None:
@@ -435,12 +369,12 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
     
     # Process batches
     for batch_idx, batch in enumerate(tqdm(dataloader, desc="Processing batches")):
+        batch_results = {}
         sentences = batch['sentence']
         nr_indices = batch['NR_index']
         tsr_indices = batch['TSR_index']
         
         # Process each sentence in the batch individually
-        # (TransformerLens hooks are easier to manage with single sentences)
         for i, sentence in enumerate(sentences):
             nr_index = nr_indices[i].item()
             tsr_index = tsr_indices[i].item()
@@ -462,15 +396,37 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
                     sentence, layers=layers)
             
             # Store results
-            results[sentence_id] = {
+            sentence_data = {
                 'sentence': sentence,
                 'NR_index': nr_index,
                 'TSR_index': tsr_index,
                 'embeddings': embeddings
             }
+            
+            # Add to appropriate results collection
+            if save_separate_batches:
+                batch_results[sentence_id] = sentence_data
+            else:
+                results[sentence_id] = sentence_data
+        
+        # Save batch if requested
+        if save_path and save_separate_batches:
+            batch_save_path = Path(save_path).with_suffix(f".batch_{batch_idx}.pt")
+            torch.save(batch_results, batch_save_path)
+            print(f"Batch {batch_idx} saved to {batch_save_path}")
+        # Save checkpoint of combined results periodically
+        elif save_path and not save_separate_batches and (batch_idx + 1) % 5 == 0:
+            checkpoint_path = Path(save_path).with_suffix(f".checkpoint_{batch_idx+1}.pt")
+            torch.save(results, checkpoint_path)
+            print(f"Checkpoint saved to {checkpoint_path}")
+    
+    # Final save of combined results if not saving separately
+    if save_path and not save_separate_batches:
+        final_save_path = Path(save_path)
+        torch.save(results, final_save_path)
+        print(f"Final embeddings saved to {final_save_path}")
     
     return results
-
 
 # Example usage
 if __name__ == "__main__":
@@ -481,12 +437,37 @@ if __name__ == "__main__":
     save_path = "embeddings/zuco_gpt2_medium_embeddings.pt"
     
     # Extract embeddings with sliding window (Goldstein approach)
-    embeddings = extract_embeddings_for_zuco(
+    # Using the dataloader method
+    embeddings = extract_embeddings_with_dataloader(
         csv_path=csv_path,
         model_name=model_name,
         layers=layers,
         sliding_window=True,
-        save_path=save_path
+        batch_size=16,
+        include_attn=False,
+        save_path=save_path,
+        save_separate_batches=False  # Set to True for large datasets or distributed processing
     )
     
     print(f"Extracted embeddings for {len(embeddings)} sentences")
+    
+    # Example of processing separate batch files if save_separate_batches=True
+    """
+    # If you saved separate batch files, you can process them individually later
+    import glob
+    from pathlib import Path
+    
+    # Get all batch files
+    batch_files = glob.glob("embeddings/zuco_gpt2_medium_embeddings.batch_*.pt")
+    
+    # Process each batch
+    all_embeddings = {}
+    for batch_file in batch_files:
+        batch_embeddings = torch.load(batch_file)
+        all_embeddings.update(batch_embeddings)
+        
+    print(f"Combined embeddings for {len(all_embeddings)} sentences")
+    
+    # Save combined embeddings if needed
+    torch.save(all_embeddings, "embeddings/zuco_gpt2_medium_embeddings_combined.pt")
+    """
