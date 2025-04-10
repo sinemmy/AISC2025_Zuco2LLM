@@ -3,6 +3,9 @@ portable_zuco_data
 portable_zuco_data/*
 embeddings
 embeddings/*
+
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
