@@ -427,7 +427,17 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
         final_save_path = Path(save_path)
         torch.save(results, final_save_path)
         print(f"Final embeddings saved to {final_save_path}")
-    
+        
+        # Delete checkpoint files
+        checkpoint_pattern = str(Path(save_path).with_suffix("")) + ".checkpoint_*.pt"
+        checkpoint_files = glob.glob(checkpoint_pattern)
+        for checkpoint_file in checkpoint_files:
+            try:
+                Path(checkpoint_file).unlink()
+                print(f"Deleted checkpoint file: {checkpoint_file}")
+            except Exception as e:
+                print(f"Failed to delete {checkpoint_file}: {e}")
+        
     return results
 
 # Example usage
