@@ -61,12 +61,14 @@ class ZucoSentenceDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
             
+        row = self.data.iloc[idx]
+        
         sample = {
-            'sentence': self.data.iloc[idx]['sentence'],
-            'NR_index': self.data.iloc[idx]['NR_index'] if not pd.isna(self.data.iloc[idx]['NR_index']) else None,
-            'TSR_index': self.data.iloc[idx]['TSR_index'] if not pd.isna(self.data.iloc[idx]['TSR_index']) else None,
-            'in_NR': not pd.isna(self.data.iloc[idx]['NR_index']),
-            'in_TSR': not pd.isna(self.data.iloc[idx]['TSR_index'])
+            'sentence': row['sentence'],
+            'NR_index': row['NR_index'],
+            'TSR_index': row['TSR_index'],
+            'in_NR': row['NR_index'] != -100,
+            'in_TSR': row['TSR_index'] != -100
         }
         
         if self.transform:
@@ -77,22 +79,6 @@ class ZucoSentenceDataset(Dataset):
 def get_zuco_sentence_dataloader(csv_path, batch_size=32, shuffle=True, transform=None):
     """
     Create a DataLoader for the Zuco sentences dataset
-    
-    Parameters:
-    -----------
-    csv_path : str
-        Path to the CSV file with unique sentences and indices
-    batch_size : int
-        Batch size for the DataLoader
-    shuffle : bool
-        Whether to shuffle the data
-    transform : callable, optional
-        Transform to apply to each sample
-        
-    Returns:
-    --------
-    DataLoader
-        PyTorch DataLoader for the Zuco sentences dataset
     """
     dataset = ZucoSentenceDataset(csv_path, transform=transform)
     
@@ -100,17 +86,28 @@ def get_zuco_sentence_dataloader(csv_path, batch_size=32, shuffle=True, transfor
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        num_workers=2
+        num_workers=2  # Can safely use multiple workers now
     )
 
-# Transform to tokenize sentences 
+# Example tokenizer transform
 class TokenizerTransform:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         
     def __call__(self, sample):
         # Tokenize the sentence
-        tokenized = self.tokenizer(sample['sentence'])
+        tokenized = self.tokenizer(
+            sample['sentence'],
+            return_tensors='pt',
+            padding='max_length',
+            truncation=True,
+            max_length=128
+        )
+        
+        # Remove the batch dimension
+        for key in tokenized:
+            if isinstance(tokenized[key], torch.Tensor):
+                tokenized[key] = tokenized[key].squeeze(0)
         
         # Add tokenized data to the sample
         sample['tokens'] = tokenized
