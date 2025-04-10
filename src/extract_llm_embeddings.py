@@ -5,6 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 import transformer_lens.utils as utils
 from transformer_lens import HookedTransformer
+import os
 
 class TransformerLensEmbeddingExtractor:
     """
@@ -342,6 +343,7 @@ def extract_embeddings_with_dataloader(csv_path, model_name='gpt2-medium', layer
     from pathlib import Path
     import torch
     
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     # Create tokenizer and transform
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
