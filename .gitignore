@@ -6,6 +6,9 @@ embeddings/*
 
 .DS_Store
 
+zuco_data/*
+zuco_data
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
