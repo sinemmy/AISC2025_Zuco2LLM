@@ -8,6 +8,7 @@ embeddings/*
 
 zuco_data/*
 zuco_data
+src/saved_data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
